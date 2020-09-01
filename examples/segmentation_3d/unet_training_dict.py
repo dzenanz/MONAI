@@ -44,7 +44,7 @@ def main(tempdir):
     # create a temporary directory and 40 random image, mask pairs
     print(f"generating synthetic data to {tempdir} (this may take a while)")
     for i in range(40):
-        im, seg = create_test_image_3d(128, 128, 128, num_seg_classes=1, channel_dim=-1)
+        im, seg = create_test_image_3d(128, 128, 128, num_seg_classes=3, channel_dim=-1)
 
         n = nib.Nifti1Image(im, np.eye(4))
         nib.save(n, os.path.join(tempdir, f"img{i:d}.nii.gz"))
@@ -64,9 +64,9 @@ def main(tempdir):
             AsChannelFirstd(keys=["img", "seg"], channel_dim=-1),
             ScaleIntensityd(keys="img"),
             RandCropByPosNegLabeld(
-                keys=["img", "seg"], label_key="seg", spatial_size=[96, 96, 96], pos=1, neg=1, num_samples=4
+                keys=["img", "seg"], label_key="seg", spatial_size=[64, 64, 64], pos=1, neg=1, num_samples=4
             ),
-            RandRotate90d(keys=["img", "seg"], prob=0.5, spatial_axes=[0, 2]),
+            RandRotate90d(keys=["img", "seg"], prob=0.35, spatial_axes=[0, 2]),
             ToTensord(keys=["img", "seg"]),
         ]
     )
@@ -122,9 +122,9 @@ def main(tempdir):
     epoch_loss_values = list()
     metric_values = list()
     writer = SummaryWriter()
-    for epoch in range(5):
+    for epoch in range(10):
         print("-" * 10)
-        print(f"epoch {epoch + 1}/{5}")
+        print(f"epoch {epoch + 1}/{10}")
         model.train()
         epoch_loss = 0
         step = 0
@@ -154,7 +154,7 @@ def main(tempdir):
                 val_outputs = None
                 for val_data in val_loader:
                     val_images, val_labels = val_data["img"].to(device), val_data["seg"].to(device)
-                    roi_size = (96, 96, 96)
+                    roi_size = (64, 64, 64)
                     sw_batch_size = 4
                     val_outputs = sliding_window_inference(val_images, roi_size, sw_batch_size, model)
                     value = dice_metric(y_pred=val_outputs, y=val_labels)
@@ -183,5 +183,4 @@ def main(tempdir):
 
 
 if __name__ == "__main__":
-    with tempfile.TemporaryDirectory() as tempdir:
-        main(tempdir)
+    main("./workspace/data/medical/tempMy")
