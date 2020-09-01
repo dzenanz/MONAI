@@ -41,16 +41,19 @@ def main(tempdir):
     monai.config.print_config()
     logging.basicConfig(stream=sys.stdout, level=logging.INFO)
 
-    # create a temporary directory and 40 random image, mask pairs
-    print(f"generating synthetic data to {tempdir} (this may take a while)")
-    for i in range(40):
-        im, seg = create_test_image_3d(128, 128, 128, num_seg_classes=3, channel_dim=-1)
+    # # create a temporary directory and 40 random image, mask pairs
+    if (not os.path.exists(tempdir)):
+        print(f"generating synthetic data to {tempdir}")
+        for i in range(40):
+            im, seg = create_test_image_3d(128, 128, 128, num_seg_classes=3, channel_dim=-1)
 
-        n = nib.Nifti1Image(im, np.eye(4))
-        nib.save(n, os.path.join(tempdir, f"img{i:d}.nii.gz"))
+            n = nib.Nifti1Image(im, np.eye(4))
+            nib.save(n, os.path.join(tempdir, f"img{i:d}.nii.gz"))
 
-        n = nib.Nifti1Image(seg, np.eye(4))
-        nib.save(n, os.path.join(tempdir, f"seg{i:d}.nii.gz"))
+            n = nib.Nifti1Image(seg, np.eye(4))
+            nib.save(n, os.path.join(tempdir, f"seg{i:d}.nii.gz"))
+    else:
+        print(f"Found data in {tempdir}")
 
     images = sorted(glob(os.path.join(tempdir, "img*.nii.gz")))
     segs = sorted(glob(os.path.join(tempdir, "seg*.nii.gz")))
@@ -104,6 +107,7 @@ def main(tempdir):
 
     # create UNet, DiceLoss and Adam optimizer
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+
     model = monai.networks.nets.UNet(
         dimensions=3,
         in_channels=1,
@@ -112,6 +116,11 @@ def main(tempdir):
         strides=(2, 2, 2, 2),
         num_res_units=2,
     ).to(device)
+    model_path = "best_metric_model_segmentation3d_dict.pth"
+    if (os.path.exists(model_path)):
+        model.load_state_dict(torch.load(model_path))
+        print(f"Loaded model from file '{model_path}'")
+
     loss_function = monai.losses.DiceLoss(sigmoid=True)
     optimizer = torch.optim.Adam(model.parameters(), 1e-3)
 
@@ -122,9 +131,10 @@ def main(tempdir):
     epoch_loss_values = list()
     metric_values = list()
     writer = SummaryWriter()
-    for epoch in range(10):
+    num_epochs = 10
+    for epoch in range(num_epochs):
         print("-" * 10)
-        print(f"epoch {epoch + 1}/{10}")
+        print(f"epoch {epoch + 1}/{num_epochs}")
         model.train()
         epoch_loss = 0
         step = 0
@@ -165,7 +175,7 @@ def main(tempdir):
                 if metric > best_metric:
                     best_metric = metric
                     best_metric_epoch = epoch + 1
-                    torch.save(model.state_dict(), "best_metric_model_segmentation3d_dict.pth")
+                    torch.save(model.state_dict(), model_path)
                     print("saved new best metric model")
                 print(
                     "current epoch: {} current mean dice: {:.4f} best mean dice: {:.4f} at epoch {}".format(
